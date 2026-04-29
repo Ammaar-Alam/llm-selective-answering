@@ -1,0 +1,43 @@
+run_name: smoke_test
+random_seed: 312
+mode: mock
+
+paths:
+  raw_dir: data/raw
+  processed_dir: data/processed
+  results_dir: results
+
+datasets:
+  use_mmlu: true
+  use_squad_v2: true
+  use_truthfulqa: false
+  sample_size_per_dataset: 8
+  mmlu_subjects:
+    - abstract_algebra
+    - college_computer_science
+  squad_answerable_fraction: 0.5
+
+splits:
+  train: 0.6
+  validation: 0.2
+  test: 0.2
+
+inference:
+  provider: mock
+  model_name: mock-deterministic
+  prompt_type: confidence
+  self_consistency_samples: 3
+
+features:
+  include_item_features: true
+  include_verbal_confidence: true
+  include_self_consistency: true
+  include_choice_signals: true
+
+models:
+  logistic_regression: true
+  random_forest: true
+  gradient_boosting: false
+
+evaluation:
+  lambdas: [0.5, 1, 2, 5, 10, 20, 50]

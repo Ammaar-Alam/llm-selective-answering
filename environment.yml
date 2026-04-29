@@ -1,0 +1,20 @@
+name: sml312-abstention
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - pip
+  - numpy
+  - pandas
+  - scikit-learn
+  - matplotlib
+  - pyyaml
+  - jupyter
+  - pytest
+  - pip:
+      - datasets
+      - evaluate
+      - torch
+      - tqdm
+      - transformers
+

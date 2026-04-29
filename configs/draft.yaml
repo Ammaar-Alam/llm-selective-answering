@@ -1,0 +1,48 @@
+run_name: draft
+random_seed: 312
+mode: huggingface
+
+paths:
+  raw_dir: data/raw
+  processed_dir: data/processed
+  results_dir: results
+
+datasets:
+  use_mmlu: true
+  use_squad_v2: true
+  use_truthfulqa: false
+  sample_size_per_dataset: 100
+  mmlu_subjects:
+    - abstract_algebra
+    - college_computer_science
+    - high_school_us_history
+    - professional_law
+    - moral_scenarios
+  squad_answerable_fraction: 0.5
+
+splits:
+  train: 0.6
+  validation: 0.2
+  test: 0.2
+
+inference:
+  provider: transformers
+  model_name: google/flan-t5-small
+  prompt_type: confidence
+  self_consistency_samples: 5
+  batch_size: 4
+  max_new_tokens: 80
+
+features:
+  include_item_features: true
+  include_verbal_confidence: true
+  include_self_consistency: true
+  include_choice_signals: true
+
+models:
+  logistic_regression: true
+  random_forest: true
+  gradient_boosting: true
+
+evaluation:
+  lambdas: [0.5, 1, 2, 5, 10, 20, 50]

@@ -13,13 +13,14 @@ Can measurable uncertainty and item-level features predict when an LLM answer wi
 ```text
 .
 ├── configs/              # Run settings for smoke, baseline, and confirmatory experiments
-├── data/                 # Raw and processed data, not tracked by Git
+├── data/                 # Tracked placeholders for regenerated raw/processed data
+├── results/              # Tracked placeholders for regenerated tables and figures
 ├── scripts/              # Pipeline and analysis entrypoints
 ├── src/abstention/       # Reusable project package
 └── tests/                # Unit tests for core logic
 ```
 
-Generated datasets, model outputs, metrics, and figures are excluded from Git. The public repository tracks the code and configs needed to regenerate them.
+Generated datasets, model outputs, metrics, and figures are excluded from Git. The public repository tracks the code, configs, and directory documentation needed to regenerate them.
 
 ## Setup
 

@@ -20,8 +20,16 @@ OUTPUT_COLUMNS = [
     "verbal_confidence",
     "model_abstained",
     "self_consistency",
+    "choice_top_prob",
     "choice_margin",
     "choice_entropy",
+    "token_confidence_min",
+    "token_confidence_std",
+    "raw_response_length",
+    "parsed_answer_length",
+    "response_empty",
+    "confidence_missing",
+    "parsed_choice_valid",
 ]
 
 
@@ -61,6 +69,9 @@ def cache_key(config: dict[str, Any]) -> str:
         "provider": inference_cfg.get("provider", "mock"),
         "model_name": inference_cfg.get("model_name", "mock-deterministic"),
         "prompt_type": inference_cfg.get("prompt_type", "confidence"),
+        "max_new_tokens": inference_cfg.get("max_new_tokens", 80),
+        "batch_size": inference_cfg.get("batch_size", 4),
+        "feature_version": 2,
     }
     return hashlib.sha1(json.dumps(payload, sort_keys=True).encode("utf-8")).hexdigest()[:10]
 
@@ -101,15 +112,31 @@ def _run_transformers_items(items: list[dict[str, Any]], config: dict[str, Any])
                 output_scores=True,
             )
         decoded = tokenizer.batch_decode(generated.sequences, skip_special_tokens=True)
-        confidences = _sequence_confidences(generated.scores, generated.sequences, tokenizer)
-        for item, raw_text, confidence in zip(batch, decoded, confidences):
-            raw = _coerce_confidence_response(raw_text, confidence)
+        token_stats = _sequence_confidences(generated.scores, generated.sequences, tokenizer)
+        choice_stats = _choice_stats_for_batch(model, tokenizer, encoded, batch)
+        for item, raw_text, stats, choice_stat in zip(batch, decoded, token_stats, choice_stats):
+            raw = _coerce_confidence_response(raw_text, stats["mean"])
             parsed = parse_response(raw)
-            rows.append(_output_row(item["item_id"], raw, parsed, item))
+            rows.append(_output_row(item["item_id"], raw, parsed, item, stats, choice_stat))
     return rows
 
 
-def _output_row(item_id: str, raw: str, parsed: ParsedResponse, item: dict[str, Any]) -> dict[str, Any]:
+def _output_row(
+    item_id: str,
+    raw: str,
+    parsed: ParsedResponse,
+    item: dict[str, Any],
+    token_stats: dict[str, float | None] | None = None,
+    choice_stats: dict[str, float] | None = None,
+) -> dict[str, Any]:
+    token_stats = token_stats or {"mean": parsed.confidence, "min": parsed.confidence, "std": 0.0}
+    choice_stats = choice_stats or {
+        "choice_top_prob": mock_choice_top_prob(item, parsed),
+        "choice_margin": mock_choice_margin(item, parsed),
+        "choice_entropy": mock_choice_entropy(item),
+    }
+    parsed_choice = _extract_choice(parsed.answer)
+    raw_stripped = raw.strip()
     return {
         "item_id": item_id,
         "raw_response": raw,
@@ -117,8 +144,16 @@ def _output_row(item_id: str, raw: str, parsed: ParsedResponse, item: dict[str, 
         "verbal_confidence": parsed.confidence,
         "model_abstained": parsed.abstained,
         "self_consistency": mock_self_consistency(item, parsed),
-        "choice_margin": mock_choice_margin(item, parsed),
-        "choice_entropy": mock_choice_entropy(item),
+        "choice_top_prob": choice_stats["choice_top_prob"],
+        "choice_margin": choice_stats["choice_margin"],
+        "choice_entropy": choice_stats["choice_entropy"],
+        "token_confidence_min": token_stats["min"],
+        "token_confidence_std": token_stats["std"],
+        "raw_response_length": len(raw_stripped),
+        "parsed_answer_length": len(parsed.answer.strip()),
+        "response_empty": raw_stripped == "",
+        "confidence_missing": parsed.confidence is None,
+        "parsed_choice_valid": item.get("benchmark") != "mmlu" or parsed_choice in {"A", "B", "C", "D"},
     }
 
 
@@ -135,12 +170,12 @@ def _coerce_confidence_response(raw_text: str, confidence: float | None) -> str:
     )
 
 
-def _sequence_confidences(scores: tuple[Any, ...], sequences: Any, tokenizer: Any) -> list[float | None]:
+def _sequence_confidences(scores: tuple[Any, ...], sequences: Any, tokenizer: Any) -> list[dict[str, float | None]]:
     if not scores:
-        return [None] * len(sequences)
+        return [{"mean": None, "min": None, "std": None} for _ in range(len(sequences))]
     import torch
 
-    confidences: list[float | None] = []
+    confidences: list[dict[str, float | None]] = []
     score_tensor = torch.stack(scores, dim=1)
     probs = torch.softmax(score_tensor, dim=-1)
     pad_id = tokenizer.pad_token_id
@@ -151,8 +186,49 @@ def _sequence_confidences(scores: tuple[Any, ...], sequences: Any, tokenizer: An
             if pad_id is not None and int(token_id) == int(pad_id):
                 continue
             token_probs.append(float(probs[batch_idx, step, int(token_id)]))
-        confidences.append(float(sum(token_probs) / len(token_probs)) if token_probs else None)
+        if token_probs:
+            mean = float(sum(token_probs) / len(token_probs))
+            variance = sum((value - mean) ** 2 for value in token_probs) / len(token_probs)
+            confidences.append({"mean": mean, "min": min(token_probs), "std": math.sqrt(variance)})
+        else:
+            confidences.append({"mean": None, "min": None, "std": None})
     return confidences
+
+
+def _choice_stats_for_batch(model: Any, tokenizer: Any, encoded: Any, items: list[dict[str, Any]]) -> list[dict[str, float]]:
+    import torch
+
+    labels = ["A", "B", "C", "D"]
+    token_ids = [_first_token_id(tokenizer, label) for label in labels]
+    decoder_start = model.config.decoder_start_token_id
+    if decoder_start is None:
+        decoder_start = tokenizer.pad_token_id
+    decoder_input_ids = torch.full(
+        (len(items), 1), int(decoder_start), dtype=torch.long, device=model.device
+    )
+    with torch.no_grad():
+        logits = model(**encoded, decoder_input_ids=decoder_input_ids).logits[:, -1, token_ids]
+    probs = torch.softmax(logits, dim=-1).detach().cpu().numpy()
+    stats = []
+    for item, row in zip(items, probs):
+        if item.get("benchmark") != "mmlu":
+            stats.append({"choice_top_prob": 0.0, "choice_margin": 0.0, "choice_entropy": 0.0})
+            continue
+        sorted_probs = sorted((float(value) for value in row), reverse=True)
+        entropy = -sum(float(value) * math.log(max(float(value), 1e-12)) for value in row)
+        stats.append(
+            {
+                "choice_top_prob": sorted_probs[0],
+                "choice_margin": sorted_probs[0] - sorted_probs[1],
+                "choice_entropy": entropy,
+            }
+        )
+    return stats
+
+
+def _first_token_id(tokenizer: Any, text: str) -> int:
+    ids = tokenizer(text, add_special_tokens=False).input_ids
+    return int(ids[0])
 
 
 def _load_cache(cache_path: str | Path | None) -> dict[str, dict[str, Any]]:
@@ -162,6 +238,8 @@ def _load_cache(cache_path: str | Path | None) -> dict[str, dict[str, Any]]:
     if not path.exists():
         return {}
     frame = pd.read_csv(path)
+    if any(column not in frame.columns for column in OUTPUT_COLUMNS):
+        return {}
     return {str(row["item_id"]): row.to_dict() for _, row in frame.iterrows()}
 
 
@@ -200,8 +278,22 @@ def mock_choice_margin(item: dict[str, Any], parsed: ParsedResponse) -> float:
     return 0.55 if parsed.confidence and parsed.confidence >= 0.7 else 0.12
 
 
+def mock_choice_top_prob(item: dict[str, Any], parsed: ParsedResponse) -> float:
+    if item["benchmark"] != "mmlu":
+        return 0.0
+    return 0.7 if parsed.confidence and parsed.confidence >= 0.7 else 0.35
+
+
 def mock_choice_entropy(item: dict[str, Any]) -> float:
     return 1.15 if item["benchmark"] == "mmlu" else 0.0
+
+
+def _extract_choice(answer: str) -> str | None:
+    text = str(answer).upper()
+    for label in ("A", "B", "C", "D"):
+        if label in text.split() or text.strip().startswith(label):
+            return label
+    return None
 
 
 def _configure_transformers_cache(config: dict[str, Any]) -> None:

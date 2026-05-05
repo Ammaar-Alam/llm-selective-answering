@@ -29,6 +29,7 @@ inference:
   provider: transformers
   model_name: google/flan-t5-small
   prompt_type: confidence
+  # Proxy stability setting; this is not multi-sample self-consistency decoding.
   self_consistency_samples: 5
   batch_size: 4
   max_new_tokens: 80

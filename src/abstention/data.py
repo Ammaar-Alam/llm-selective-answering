@@ -73,15 +73,15 @@ def load_mmlu(config: dict[str, Any]) -> pd.DataFrame:
     sample_size = int(config.get("datasets", {}).get("sample_size_per_dataset", 1000))
     subjects = config.get("datasets", {}).get("mmlu_subjects", ["abstract_algebra"])
     per_subject = max(1, math.ceil(sample_size / max(1, len(subjects))))
-    rows: list[dict[str, Any]] = []
+    rows_by_subject: dict[str, list[dict[str, Any]]] = {}
     for subject in subjects:
         ds = load_dataset("cais/mmlu", subject, split="test")
+        subject_rows = []
         for idx, row in enumerate(ds):
-            subject_count = sum(existing["subject_or_category"] == subject for existing in rows)
-            if len(rows) >= sample_size or subject_count >= per_subject:
+            if len(subject_rows) >= per_subject:
                 break
             answer_index = int(row["answer"])
-            rows.append(
+            subject_rows.append(
                 {
                     "item_id": f"mmlu_{subject}_{idx}",
                     "benchmark": "mmlu",
@@ -95,6 +95,35 @@ def load_mmlu(config: dict[str, Any]) -> pd.DataFrame:
                     "gold_is_answerable": True,
                 }
             )
+        rows_by_subject[subject] = subject_rows
+    rows = [row for subject_rows in rows_by_subject.values() for row in subject_rows][:sample_size]
+    if len(rows) < sample_size:
+        seen = {row["item_id"] for row in rows}
+        for subject in subjects:
+            ds = load_dataset("cais/mmlu", subject, split="test")
+            for idx, row in enumerate(ds):
+                item_id = f"mmlu_{subject}_{idx}"
+                if item_id in seen:
+                    continue
+                answer_index = int(row["answer"])
+                rows.append(
+                    {
+                        "item_id": item_id,
+                        "benchmark": "mmlu",
+                        "source_split": "test",
+                        "subject_or_category": subject,
+                        "question": row["question"],
+                        "context": "",
+                        "choices": json.dumps(list(row["choices"])),
+                        "gold_answer": CHOICE_LABELS[answer_index],
+                        "gold_answer_index": answer_index,
+                        "gold_is_answerable": True,
+                    }
+                )
+                if len(rows) >= sample_size:
+                    break
+            if len(rows) >= sample_size:
+                break
     return assign_splits(pd.DataFrame(rows), config)
 
 

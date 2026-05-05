@@ -1,4 +1,4 @@
-run_name: full
+run_name: draft_1000_strict_json
 random_seed: 312
 mode: huggingface
 
@@ -11,16 +11,13 @@ datasets:
   use_mmlu: true
   use_squad_v2: true
   use_truthfulqa: false
-  sample_size_per_dataset: 3000
+  sample_size_per_dataset: 1000
   mmlu_subjects:
     - abstract_algebra
     - college_computer_science
     - high_school_us_history
     - professional_law
     - moral_scenarios
-    - high_school_statistics
-    - machine_learning
-    - philosophy
   squad_answerable_fraction: 0.5
 
 splits:
@@ -31,13 +28,15 @@ splits:
 inference:
   provider: transformers
   model_name: google/flan-t5-small
-  prompt_type: confidence
+  prompt_type: strict_json
   # Proxy stability setting; this is not multi-sample self-consistency decoding.
   self_consistency_samples: 5
+  batch_size: 4
   max_new_tokens: 80
 
 features:
   include_item_features: true
+  include_subject_category: false
   include_verbal_confidence: true
   include_self_consistency: true
   include_choice_signals: true

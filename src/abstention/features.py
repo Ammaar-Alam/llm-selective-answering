@@ -33,13 +33,26 @@ def build_feature_table(items: pd.DataFrame, outputs: pd.DataFrame) -> pd.DataFr
                 "model_abstained": parsed.abstained,
                 "verbal_confidence": parsed.confidence if parsed.confidence is not None else 0.5,
                 "self_consistency": float(row.get("self_consistency", 0.0)),
+                "choice_top_prob": _float_value(row.get("choice_top_prob", 0.0)),
                 "choice_margin": float(row.get("choice_margin", 0.0)),
                 "choice_entropy": float(row.get("choice_entropy", 0.0)),
+                "token_confidence_min": _float_value(row.get("token_confidence_min", 0.0)),
+                "token_confidence_std": _float_value(row.get("token_confidence_std", 0.0)),
+                "raw_response_length": _float_value(row.get("raw_response_length", 0.0)),
+                "parsed_answer_length": _float_value(row.get("parsed_answer_length", 0.0)),
+                "response_empty": bool(row.get("response_empty", False)),
+                "confidence_missing": bool(row.get("confidence_missing", False)),
+                "parsed_choice_valid": bool(row.get("parsed_choice_valid", True)),
                 "question_length": len(str(row.get("question", "")).split()),
+                "question_char_length": len(str(row.get("question", ""))),
                 "context_length": len(str(row.get("context", "")).split()),
+                "context_char_length": len(str(row.get("context", ""))),
                 "contains_number": bool(re.search(r"\d", str(row.get("question", "")))),
+                "question_mark_count": str(row.get("question", "")).count("?"),
                 "choice_count": len(choices),
                 "mean_choice_length": _mean_choice_length(choices),
+                "min_choice_length": _min_choice_length(choices),
+                "max_choice_length": _max_choice_length(choices),
             }
         )
     return pd.DataFrame(rows)
@@ -84,3 +97,21 @@ def _mean_choice_length(choices: list[str]) -> float:
     if not choices:
         return 0.0
     return float(sum(len(choice.split()) for choice in choices) / len(choices))
+
+
+def _min_choice_length(choices: list[str]) -> float:
+    if not choices:
+        return 0.0
+    return float(min(len(choice.split()) for choice in choices))
+
+
+def _max_choice_length(choices: list[str]) -> float:
+    if not choices:
+        return 0.0
+    return float(max(len(choice.split()) for choice in choices))
+
+
+def _float_value(value: object) -> float:
+    if value is None or pd.isna(value):
+        return 0.0
+    return float(value)

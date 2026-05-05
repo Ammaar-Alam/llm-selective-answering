@@ -18,14 +18,32 @@ from .metrics import expected_calibration_error
 NUMERIC_FEATURES = [
     "verbal_confidence",
     "self_consistency",
+    "choice_top_prob",
     "choice_margin",
     "choice_entropy",
+    "token_confidence_min",
+    "token_confidence_std",
+    "raw_response_length",
+    "parsed_answer_length",
     "question_length",
+    "question_char_length",
     "context_length",
+    "context_char_length",
+    "question_mark_count",
     "choice_count",
     "mean_choice_length",
+    "min_choice_length",
+    "max_choice_length",
 ]
-CATEGORICAL_FEATURES = ["benchmark", "subject_or_category", "contains_number", "model_abstained"]
+CATEGORICAL_FEATURES = [
+    "benchmark",
+    "subject_or_category",
+    "contains_number",
+    "model_abstained",
+    "response_empty",
+    "confidence_missing",
+    "parsed_choice_valid",
+]
 
 
 def train_predictors(
@@ -38,10 +56,13 @@ def train_predictors(
         raise ValueError("features must include train and validation/test rows")
 
     enabled = config.get("models", {})
+    model_features = selected_features(config)
+    categorical_features = [feature for feature in CATEGORICAL_FEATURES if feature in model_features]
     models: dict[str, Pipeline] = {}
     if enabled.get("logistic_regression", True):
         models["logistic_regression"] = _make_pipeline(
-            LogisticRegression(max_iter=1000, random_state=int(config.get("random_seed", 312)))
+            LogisticRegression(max_iter=1000, random_state=int(config.get("random_seed", 312))),
+            categorical_features,
         )
     if enabled.get("random_forest", True):
         models["random_forest"] = _make_pipeline(
@@ -50,19 +71,21 @@ def train_predictors(
                 max_depth=5,
                 min_samples_leaf=2,
                 random_state=int(config.get("random_seed", 312)),
-            )
+            ),
+            categorical_features,
         )
     if enabled.get("gradient_boosting", False):
         models["gradient_boosting"] = _make_pipeline(
-            GradientBoostingClassifier(random_state=int(config.get("random_seed", 312)))
+            GradientBoostingClassifier(random_state=int(config.get("random_seed", 312))),
+            categorical_features,
         )
 
     predictions = testable[["item_id", "split", "answer_is_correct"]].copy()
     summary: dict[str, Any] = {}
     importance_frames = []
     for name, model in models.items():
-        model.fit(train[NUMERIC_FEATURES + CATEGORICAL_FEATURES], train["answer_is_correct"])
-        proba = model.predict_proba(testable[NUMERIC_FEATURES + CATEGORICAL_FEATURES])[:, 1]
+        model.fit(train[model_features], train["answer_is_correct"])
+        proba = model.predict_proba(testable[model_features])[:, 1]
         predictions[f"{name}_prob_correct"] = proba
         summary[name] = {}
         for split, group in predictions.groupby("split"):
@@ -85,12 +108,20 @@ def save_feature_importance(importances: pd.DataFrame, path: str | Path) -> None
     importances.to_csv(out, index=False)
 
 
-def _make_pipeline(classifier: Any) -> Pipeline:
+def selected_features(config: dict[str, Any]) -> list[str]:
+    categorical = list(CATEGORICAL_FEATURES)
+    if not config.get("features", {}).get("include_subject_category", True):
+        categorical = [feature for feature in categorical if feature != "subject_or_category"]
+    return NUMERIC_FEATURES + categorical
+
+
+def _make_pipeline(classifier: Any, categorical_features: list[str]) -> Pipeline:
     # sklearn handles train only scaling inside the pipeline
+    numeric_features = [feature for feature in NUMERIC_FEATURES]
     preprocessor = ColumnTransformer(
         transformers=[
-            ("num", StandardScaler(), NUMERIC_FEATURES),
-            ("cat", OneHotEncoder(handle_unknown="ignore"), CATEGORICAL_FEATURES),
+            ("num", StandardScaler(), numeric_features),
+            ("cat", OneHotEncoder(handle_unknown="ignore"), categorical_features),
         ]
     )
     return Pipeline([("preprocessor", preprocessor), ("classifier", classifier)])

@@ -44,6 +44,9 @@ def evaluate_policies(policy_frame: pd.DataFrame, config: dict) -> tuple[pd.Data
         tuned_thresholds = {
             feature: tune_threshold(validation, feature, float(lambda_)) for feature in threshold_features
         }
+        tuned_model_thresholds = {
+            col: tune_threshold(validation, col, float(lambda_)) for col in model_cols
+        }
         threshold_rows.extend(
             {
                 "lambda": float(lambda_),
@@ -52,6 +55,15 @@ def evaluate_policies(policy_frame: pd.DataFrame, config: dict) -> tuple[pd.Data
                 "threshold": threshold,
             }
             for feature, threshold in tuned_thresholds.items()
+        )
+        threshold_rows.extend(
+            {
+                "lambda": float(lambda_),
+                "policy": f"tuned_{col.replace('_prob_correct', '')}",
+                "feature": col,
+                "threshold": threshold,
+            }
+            for col, threshold in tuned_model_thresholds.items()
         )
         for split, split_frame in policy_frame[policy_frame["split"].isin(["validation", "test"])].groupby("split"):
             y_true = split_frame["answer_is_correct"].astype(bool).to_numpy()
@@ -78,6 +90,16 @@ def evaluate_policies(policy_frame: pd.DataFrame, config: dict) -> tuple[pd.Data
                 actions = decide_from_probability(split_frame[col].to_numpy(), float(lambda_))
                 rows.append(
                     {"split": split, "policy": policy, **policy_metrics(actions, y_true, float(lambda_))}
+                )
+                tuned_actions = threshold_policy(
+                    split_frame[col].to_numpy(), tuned_model_thresholds[col]
+                )
+                rows.append(
+                    {
+                        "split": split,
+                        "policy": f"tuned_{policy}",
+                        **policy_metrics(tuned_actions, y_true, float(lambda_)),
+                    }
                 )
     return pd.DataFrame(rows), pd.DataFrame(threshold_rows)
 

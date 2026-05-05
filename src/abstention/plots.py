@@ -12,6 +12,7 @@ def make_utility_plot(metrics: pd.DataFrame, path: str | Path) -> None:
     out.parent.mkdir(parents=True, exist_ok=True)
     fig, ax = plt.subplots(figsize=(7, 4))
     for policy, group in metrics.groupby("policy"):
+        group = group.sort_values("lambda")
         ax.plot(group["lambda"], group["mean_utility"], marker="o", label=policy)
     ax.axhline(0, color="black", linewidth=0.8)
     ax.set_xlabel("wrong-answer cost")
@@ -29,7 +30,10 @@ def make_risk_coverage_plot(metrics: pd.DataFrame, path: str | Path) -> None:
     out.parent.mkdir(parents=True, exist_ok=True)
     fig, ax = plt.subplots(figsize=(7, 4))
     for policy, group in metrics.groupby("policy"):
-        ax.plot(group["coverage"], group["risk"].fillna(0), marker="o", label=policy)
+        group = group.dropna(subset=["risk"]).sort_values("coverage")
+        if group.empty:
+            continue
+        ax.plot(group["coverage"], group["risk"], marker="o", label=policy)
     ax.set_xlabel("coverage")
     ax.set_ylabel("risk among answered")
     ax.legend()

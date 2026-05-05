@@ -32,7 +32,7 @@ def policy_metrics(actions: np.ndarray, y_true: np.ndarray, lambda_: float) -> d
 
 
 def expected_calibration_error(prob_correct: np.ndarray, y_true: np.ndarray, n_bins: int = 10) -> float:
-    # small transparent ece for the paper
+    # small transparent ECE implementation
     p = np.asarray(prob_correct, dtype=float)
     y = np.asarray(y_true, dtype=float)
     if len(p) == 0:

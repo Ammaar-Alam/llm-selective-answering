@@ -10,7 +10,7 @@ paths:
 datasets:
   use_mmlu: true
   use_squad_v2: true
-  use_truthfulqa: true
+  use_truthfulqa: false
   sample_size_per_dataset: 3000
   mmlu_subjects:
     - abstract_algebra

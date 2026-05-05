@@ -4,6 +4,7 @@ import argparse
 import os
 
 os.environ["MPLCONFIGDIR"] = "/tmp/sml312-mpl"
+os.environ.setdefault("MPLBACKEND", "Agg")
 
 import pandas as pd
 
@@ -29,8 +30,9 @@ def main() -> None:
     features = pd.read_csv(processed_path(config, "features.csv"))
     predictions = pd.read_csv(processed_path(config, "predictions.csv"))
     importances = pd.read_csv(results_path(config, "tables", "feature_importance.csv"))
-    make_utility_plot(metrics, results_path(config, "figures", "utility_vs_lambda.png"))
-    make_risk_coverage_plot(metrics, results_path(config, "figures", "risk_coverage.png"))
+    test_metrics = metrics[metrics["split"] == "test"].copy()
+    make_utility_plot(test_metrics, results_path(config, "figures", "utility_vs_lambda.png"))
+    make_risk_coverage_plot(test_metrics, results_path(config, "figures", "risk_coverage.png"))
     make_roc_plot(predictions, results_path(config, "figures", "roc_curve.png"))
     make_calibration_plot(predictions, results_path(config, "figures", "calibration.png"))
     make_confidence_correctness_plot(features, results_path(config, "figures", "confidence_correctness.png"))

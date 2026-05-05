@@ -1,4 +1,4 @@
-# Risk-Sensitive Abstention for Language Models
+# LLM Selective Answering
 
 This project studies whether item-level features and uncertainty signals can predict when a language-model answer will be correct, then uses those predictions to decide whether to answer or abstain under different wrong-answer costs.
 
@@ -14,9 +14,6 @@ Can measurable uncertainty and item-level features predict when an LLM answer wi
 .
 ├── configs/              # Run settings for smoke, draft, and full experiments
 ├── data/                 # Raw and processed data, not tracked by Git
-├── notebooks/            # Colab/Jupyter analysis notebooks
-├── paper/                # Final paper draft and references
-├── presentation/         # Slide outline and presentation materials
 ├── scripts/              # Pipeline entrypoints
 ├── src/abstention/       # Reusable project package
 └── tests/                # Unit tests for core logic
@@ -40,17 +37,6 @@ conda activate sml312-abstention
 pip install -e .
 ```
 
-Google Colab setup:
-
-```python
-from google.colab import drive
-drive.mount("/content/drive")
-%cd /content/drive/MyDrive/SML312
-!pip install -e ".[dev]"
-```
-
-If the project is cloned from GitHub instead of uploaded through Drive, change into the cloned project root before running the install command.
-
 ## Smoke Test
 
 The smoke test uses deterministic mock data and mock model outputs, so it does not download full benchmarks or run model inference.
@@ -73,9 +59,7 @@ Use the draft config first:
 python3 scripts/01_build_items.py --config configs/draft.yaml
 ```
 
-Then run each subsequent numbered script in order. The full config is intended for the final larger run after the draft pipeline is stable.
-
-See `ROADMAP.md` for the implementation phases.
+Then run each subsequent numbered script in order. The draft and full configs run the same pipeline at larger sample sizes.
 
 The larger current run uses:
 

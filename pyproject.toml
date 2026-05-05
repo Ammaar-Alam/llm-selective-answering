@@ -3,9 +3,9 @@ requires = ["setuptools>=69", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "risk-sensitive-abstention"
+name = "llm-selective-answering"
 version = "0.1.0"
-description = "Correctness prediction and cost-sensitive abstention for language-model answers"
+description = "Correctness prediction and selective answering for language-model outputs"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
